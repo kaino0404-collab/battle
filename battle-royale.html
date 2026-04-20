@@ -708,16 +708,15 @@ class Character {
 
     // 이름 — 원 안에 (회전 없이 항상 고정)
     // 글자수에 따라 폰트 크기 조절: 2글자 기준 원에 꽉 차도록
-    const nlen=Math.max(1,this.name.length);
-    const fs=Math.max(8, screenR * (nlen<=2 ? 0.78 : nlen<=3 ? 0.54 : 0.40));
+    const fs=Math.max(10, screenR * 0.52);
+    const ny=sy+screenR+fs*.9; // 원 아래에 붙임
     ctx.save();
     ctx.font=`900 ${Math.round(fs)}px 'Malgun Gothic','Noto Sans KR',sans-serif`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    // 검은 외곽선으로 가독성 확보
-    ctx.strokeStyle='rgba(0,0,0,0.9)'; ctx.lineWidth=Math.max(2,fs*.18);
-    ctx.strokeText(this.name,sx,sy);
+    ctx.strokeStyle='rgba(0,0,0,0.95)'; ctx.lineWidth=Math.max(2,fs*.2);
+    ctx.strokeText(this.name,sx,ny);
     ctx.fillStyle=this.stunned?'#ffe44d':'#ffffff';
-    ctx.fillText(this.name,sx,sy);
+    ctx.fillText(this.name,sx,ny);
     ctx.restore();
 
     // 파워업 배지 (원 우상단)
