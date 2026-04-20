@@ -544,7 +544,6 @@ class Character {
       sndHit();
       if(c.hp<=0){
         c.hp=0; c.alive=false;
-        triggerDramaCam(c.wx,c.wy,1400);
         explosions.push(new Explosion(c.wx,c.wy,c.color));
         for(let i=0;i<50;i++) if(particles.length<400){
           particles.push(new Particle(c.wx,c.wy,c.color,true));
@@ -774,47 +773,11 @@ function resolveCollisions(){
 }
 
 // ── 카메라 ──
-function triggerDramaCam(wx,wy,dur){ dramaCam={x:wx,y:wy,dur,t:0}; }
-
 function updateCamera(dt){
-  const alive=characters.filter(c=>c.alive);
-  const baseZoom=Math.min(logW,logH)/(ARENA_R*1.78);
-  const lp=Math.min(1,dt/180);
-
-  // 사망 순간 줌인 (최우선)
-  if(dramaCam){
-    dramaCam.t+=dt;
-    const p=Math.min(1,dramaCam.t/dramaCam.dur);
-    // 빠르게 당겼다가 서서히 복귀
-    const ease=p<.25?p/.25:p<.65?1:(1-p)/.35;
-    const dz=Math.min(logW,logH)/(ARENA_R*.42);
-    const tz=baseZoom+(dz-baseZoom)*ease;
-    const lp2=Math.min(1,dt/90);
-    cam.x+=(dramaCam.x*ease-cam.x)*lp2;
-    cam.y+=(dramaCam.y*ease-cam.y)*lp2;
-    cam.zoom+=(tz-cam.zoom)*lp2;
-    if(p>=1) dramaCam=null;
-    return;
-  }
-
-  let tx=0,ty=0,tz=baseZoom;
-
-  if(alive.length===2){
-    // 결투: 두 캐릭터 중간 추적 + 거리에 따라 줌
-    const mx=(alive[0].wx+alive[1].wx)/2, my=(alive[0].wy+alive[1].wy)/2;
-    const d=Math.hypot(alive[0].wx-alive[1].wx,alive[0].wy-alive[1].wy);
-    tx=mx; ty=my;
-    tz=Math.min(logW,logH)/Math.max(d*1.5+CHAR_R*7, ARENA_R*.55);
-    tz=Math.max(tz,baseZoom);
-  } else if(alive.length===1){
-    // 우승자 추적
-    tx=alive[0].wx; ty=alive[0].wy;
-    tz=Math.min(logW,logH)/(ARENA_R*.5);
-  }
-
-  cam.x+=(tx-cam.x)*lp;
-  cam.y+=(ty-cam.y)*lp;
-  cam.zoom+=(tz-cam.zoom)*lp;
+  const targetZoom=Math.min(logW,logH)/(ARENA_R*1.78);
+  const lp=Math.min(1,dt/120);
+  cam.x+=(0-cam.x)*lp; cam.y+=(0-cam.y)*lp;
+  cam.zoom+=(targetZoom-cam.zoom)*lp;
 }
 
 // ── 아레나 (세계 좌표, 중심=0,0) ──
