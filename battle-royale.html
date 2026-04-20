@@ -278,7 +278,8 @@ let explosions=[];
 
 // ── 아이템 ──
 class Item {
-  constructor(){
+  constructor(type){
+    this.type=type||( Math.random()<.5?'range':'speed' );
     const angle=Math.random()*Math.PI*2;
     const d=ARENA_R*(.15+Math.random()*.55);
     this.wx=Math.cos(angle)*d; this.wy=Math.sin(angle)*d;
@@ -290,14 +291,20 @@ class Item {
     if(!this.active) return;
     const x=this.wx, y=this.wy, r=this.r;
     const pulse=Math.sin(this.pulseT/350)*.35+.75;
+    const isSpeed=this.type==='speed';
+    const glowColor=isSpeed?'#00e5ff':'#FFD700';
     // 외부 글로우
     ctx.save(); ctx.globalAlpha=.38*pulse;
-    ctx.fillStyle='#FFD700'; ctx.shadowColor='#FFD700'; ctx.shadowBlur=r*2.5;
+    ctx.fillStyle=glowColor; ctx.shadowColor=glowColor; ctx.shadowBlur=r*2.5;
     ctx.beginPath(); ctx.arc(x,y,r*1.9,0,Math.PI*2); ctx.fill(); ctx.restore();
     // 본체
     ctx.save();
     const g=ctx.createRadialGradient(x-r*.3,y-r*.3,r*.05,x,y,r);
-    g.addColorStop(0,'#fffbe6'); g.addColorStop(.4,'#FFD700'); g.addColorStop(1,'#e65c00');
+    if(isSpeed){
+      g.addColorStop(0,'#e0f7ff'); g.addColorStop(.4,'#00bcd4'); g.addColorStop(1,'#0044aa');
+    } else {
+      g.addColorStop(0,'#fffbe6'); g.addColorStop(.4,'#FFD700'); g.addColorStop(1,'#e65c00');
+    }
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
     ctx.fillStyle=g; ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=r*.1; ctx.stroke();
@@ -305,7 +312,7 @@ class Item {
     ctx.font=`bold ${Math.round(r*.95)}px serif`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillStyle='#fff'; ctx.shadowColor='rgba(0,0,0,.4)'; ctx.shadowBlur=4;
-    ctx.fillText('🥊',x,y);
+    ctx.fillText(isSpeed?'⚡':'🥊',x,y);
     ctx.restore();
   }
 }
@@ -320,7 +327,8 @@ class Character {
     this.name=name; this.wx=wx; this.wy=wy;
     this.vx=0; this.vy=0;      // 이동 속도 (AI가 직접 설정, 일정함)
     this.kbx=0; this.kby=0;    // 넉백 속도 (시간에 따라 감속)
-    this.powerUpCount=0;       // 🥊 아이템 누적 개수 (먹을수록 사정거리 증가)
+    this.powerUpCount=0;       // 🥊 사정거리 증가 아이템 누적
+    this.punchSpeedCount=0;   // ⚡ 주먹 속도 증가 아이템 누적
     this.hp=100; this.maxHp=100; this.color=color;
     this.alive=true; this.dyingT=0;
 
@@ -346,8 +354,9 @@ class Character {
   }
 
   get r(){ return CHAR_R; }
-  get armMult(){ return 1.0 + this.powerUpCount * 0.9; } // 먹을수록 +90% 씩 사정거리 증가
+  get armMult(){ return 1.0 + this.powerUpCount * 0.9; }
   get effectivePunchRange(){ return PUNCH_RANGE + ARM_LEN*(this.armMult-1); }
+  get punchCdMult(){ return Math.pow(0.72, this.punchSpeedCount); } // 먹을수록 28%씩 쿨다운 단축
 
   update(dt, all){
     if(!this.alive){ this.dyingT+=dt; return; }
@@ -364,9 +373,15 @@ class Character {
     for(const item of items){
       if(!item.active) continue;
       if(Math.hypot(this.wx-item.wx,this.wy-item.wy)<this.r+item.r+5){
-        item.active=false; this.powerUpCount++;
+        item.active=false;
         itemRespawnT=7000;
-        addLog(`🥊 <b style="color:${this.color}">${this.name}</b> 아이템 획득! (×${this.powerUpCount})`);
+        if(item.type==='speed'){
+          this.punchSpeedCount++;
+          addLog(`⚡ <b style="color:${this.color}">${this.name}</b> 속도 UP! (쿨다운 ${Math.round(PUNCH_CD*this.punchCdMult)}ms)`);
+        } else {
+          this.powerUpCount++;
+          addLog(`🥊 <b style="color:${this.color}">${this.name}</b> 사정거리 UP! (×${this.powerUpCount})`);
+        }
         for(let i=0;i<14;i++) if(particles.length<350) particles.push(new Particle(this.wx,this.wy,'#FFD700'));
         try{ const ac=getAC(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);
           o.type='sine';o.frequency.setValueAtTime(660,ac.currentTime);o.frequency.linearRampToValueAtTime(1100+this.powerUpCount*100,ac.currentTime+.15);
@@ -479,7 +494,7 @@ class Character {
   startPunch(){
     const arm=Math.random()<.5?'left':'right', off=arm==='left'?-.26:.26;
     this.activePunch={arm, angle:this.facing+off, timer:0, hit:false};
-    this.punchCd=PUNCH_CD;
+    this.punchCd=PUNCH_CD*this.punchCdMult;
   }
 
   updatePunch(dt,all){
