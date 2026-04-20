@@ -812,8 +812,10 @@ function gameLoop(ts){
   shakeTimer=Math.max(0,shakeTimer-1);
 
   if(alive.length<=1&&gameRunning){
-    gameRunning=false; drawFrame();
-    setTimeout(()=>showResult(alive[0]),900); return;
+    if(explosions.length===0&&particles.every(p=>p.life<=0.2)){
+      gameRunning=false;
+      setTimeout(()=>showResult(alive[0]),400); return;
+    }
   }
   animId=requestAnimationFrame(gameLoop);
 }
