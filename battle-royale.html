@@ -349,6 +349,7 @@ class Character {
     // AI
     this.target=null; this.targetChangeT=0;
     this.wanderAngle=Math.random()*Math.PI*2; this.wanderT=0;
+    this.orbitDir=Math.random()<.5?1:-1; this.orbitDirT=0;
     this.facing=Math.random()*Math.PI*2;
 
     // 넘어짐
@@ -488,7 +489,9 @@ class Character {
     if(dist>this.effectivePunchRange+15){
       this.vx=dx/dist*spd; this.vy=dy/dist*spd;
     } else {
-      const perp=this.facing+(Math.random()<.5?1:-1)*Math.PI*.5;
+      this.orbitDirT-=dt;
+      if(this.orbitDirT<=0){ this.orbitDir*=-1; this.orbitDirT=500+Math.random()*600; }
+      const perp=this.facing+this.orbitDir*Math.PI*.5;
       this.vx=Math.cos(perp)*spd*.55; this.vy=Math.sin(perp)*spd*.55;
       if(this.punchCd<=0&&!this.activePunch) this.startPunch();
     }
