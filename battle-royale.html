@@ -534,7 +534,6 @@ class Character {
       const kba=Math.atan2(c.wy-this.wy,c.wx-this.wx);
       // 넉백은 kbx/kby에 추가 (vx/vy 이동속도와 분리)
       c.kbx+=Math.cos(kba)*KB_FORCE; c.kby+=Math.sin(kba)*KB_FORCE;
-      shakeTimer=10;
       // 맞으면 항상 넘어짐 (스턴 연장/재설정)
       c.stunned=true; c.stunnedT=STUN_DUR+Math.random()*200; c.spinV=5+Math.random()*3;
       for(let i=0;i<9;i++) if(particles.length<350){
