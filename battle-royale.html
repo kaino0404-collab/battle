@@ -598,6 +598,44 @@ class Character {
     sh.addColorStop(0,'rgba(255,255,255,.55)'); sh.addColorStop(1,'rgba(255,255,255,0)');
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=sh; ctx.fill();
 
+    this.drawEyes(x,y,this.facing,false);
+  }
+
+  drawEyes(cx,cy,facing,stunned){
+    const r=CHAR_R;
+    const ew=r*.22; // 눈 흰자 반지름
+    const fd=r*.18; // 앞쪽 오프셋
+    const pd=r*.3;  // 좌우 오프셋
+    const fx=Math.cos(facing), fy=Math.sin(facing);
+    const px=-Math.sin(facing), py=Math.cos(facing);
+    const lx=cx+fx*fd-px*pd, ly=cy+fy*fd-py*pd;
+    const rx=cx+fx*fd+px*pd, ry=cy+fy*fd+py*pd;
+
+    if(stunned){
+      // X눈
+      ctx.save(); ctx.strokeStyle='#ff3333'; ctx.lineWidth=ew*.55; ctx.lineCap='round';
+      const s=ew*.75;
+      ctx.beginPath(); ctx.moveTo(lx-s,ly-s); ctx.lineTo(lx+s,ly+s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(lx+s,ly-s); ctx.lineTo(lx-s,ly+s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(rx-s,ry-s); ctx.lineTo(rx+s,ry+s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(rx+s,ry-s); ctx.lineTo(rx-s,ry+s); ctx.stroke();
+      ctx.restore();
+    } else {
+      // 흰자
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(lx,ly,ew,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(rx,ry,ew,0,Math.PI*2); ctx.fill();
+      // 동공 (앞쪽으로 살짝 치우침)
+      const pr=ew*.55, po=ew*.28;
+      ctx.fillStyle='#111';
+      ctx.beginPath(); ctx.arc(lx+fx*po,ly+fy*po,pr,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(rx+fx*po,ry+fy*po,pr,0,Math.PI*2); ctx.fill();
+      // 하이라이트
+      const hr=pr*.38;
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(lx+fx*po-pr*.3,ly+fy*po-pr*.3,hr,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(rx+fx*po-pr*.3,ry+fy*po-pr*.3,hr,0,Math.PI*2); ctx.fill();
+    }
   }
 
   drawFallen(x,y){
@@ -623,6 +661,7 @@ class Character {
     const sh=ctx.createRadialGradient(-r*.3,-r*.32,0,-r*.3,-r*.32,r*.42);
     sh.addColorStop(0,'rgba(255,255,255,.5)'); sh.addColorStop(1,'rgba(255,255,255,0)');
     ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fillStyle=sh; ctx.fill();
+    this.drawEyes(0,0,this.facing-this.spin,true);
     ctx.restore();
 
     // 빙글빙글 별 (스턴 중반까지)
