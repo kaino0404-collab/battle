@@ -607,8 +607,10 @@ class Character {
     ctx.save(); ctx.globalAlpha=.28; ctx.fillStyle='#000';
     ctx.beginPath(); ctx.arc(x+r*.12,y+r*.18,r*.9,0,Math.PI*2); ctx.fill(); ctx.restore();
 
-    // 몸통 — 동일 크기, 스핀만 적용
+    // 몸통 + 팔 — 스핀 적용 (팔이 몸통과 함께 회전)
     ctx.save(); ctx.translate(x,y); ctx.rotate(this.spin);
+    this.drawArm(0,0,this.leftArm);
+    this.drawArm(0,0,this.rightArm);
     const g=ctx.createRadialGradient(-r*.32,-r*.32,r*.04,0,0,r);
     g.addColorStop(0,lighten(this.color,90));
     g.addColorStop(.35,lighten(this.color,30));
