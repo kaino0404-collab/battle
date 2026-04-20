@@ -820,7 +820,7 @@ function drawFrame(){
   // 화면 공간 UI (HP바, 이름) — 항상 읽기 좋은 크기
   if(cam.zoom>0.15){
     for(const c of characters){
-      if(!c.alive||c.stunned) continue;
+      if(!c.alive) continue;
       const sx=canvas.width/2 +(c.wx-cam.x)*cam.zoom;
       const sy=canvas.height/2+(c.wy-cam.y)*cam.zoom;
       c.drawUI(sx,sy);
