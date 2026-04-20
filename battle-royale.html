@@ -167,6 +167,7 @@ let audioCtx     = null;
 
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
+let logW=0, logH=0; // CSS 논리 픽셀 크기
 
 // 세계 단위 상수 (스폰 시 결정)
 let ARENA_R, CHAR_R, ARM_LEN, FIST_R, PUNCH_RANGE;
@@ -180,8 +181,13 @@ const cam = { x:0, y:0, zoom:1 };
 
 // ── 캔버스 ──
 function setCanvasSize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const dpr = window.devicePixelRatio || 1;
+  logW = window.innerWidth;
+  logH = window.innerHeight;
+  canvas.style.width  = logW + 'px';
+  canvas.style.height = logH + 'px';
+  canvas.width  = logW * dpr;
+  canvas.height = logH * dpr;
 }
 
 // ── 참가자 ──
@@ -728,7 +734,7 @@ function resolveCollisions(){
 // ── 카메라 ──
 function updateCamera(dt){
   // 항상 전체 아레나가 보이도록 고정 (여백 최소화)
-  const targetZoom=Math.min(canvas.width,canvas.height)/(ARENA_R*1.78);
+  const targetZoom=Math.min(logW,logH)/(ARENA_R*1.78);
   const lp=Math.min(1,dt/120);
   cam.x+=(0-cam.x)*lp; cam.y+=(0-cam.y)*lp;
   cam.zoom+=(targetZoom-cam.zoom)*lp;
@@ -789,7 +795,7 @@ function spawnCharacters(){
 
   // 카메라 초기화: 전체 아레나 뷰
   cam.x=0; cam.y=0;
-  cam.zoom=Math.min(canvas.width,canvas.height)/(ARENA_R*1.78);
+  cam.zoom=Math.min(logW,logH)/(ARENA_R*1.78);
 
   characters=participants.map((name,i)=>{
     const angle=(i/n)*Math.PI*2+Math.random()*.2;
@@ -841,13 +847,17 @@ function gameLoop(ts){
 }
 
 function drawFrame(){
+  const dpr = window.devicePixelRatio || 1;
   ctx.fillStyle='#0d0d1f'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
   ctx.save();
+  ctx.scale(dpr, dpr); // 논리 픽셀 좌표계로 전환
+
   // 흔들기 (화면 공간)
   if(shakeTimer>0){ const s=Math.min(shakeTimer,18)*.55; ctx.translate((Math.random()-.5)*s,(Math.random()-.5)*s); }
-  // 카메라
-  ctx.translate(canvas.width/2, canvas.height/2);
+
+  ctx.save(); // 카메라
+  ctx.translate(logW/2, logH/2);
   ctx.scale(cam.zoom, cam.zoom);
   ctx.translate(-cam.x, -cam.y);
 
@@ -858,17 +868,19 @@ function drawFrame(){
   for(const p of particles) p.draw();
   for(const e of explosions) e.draw();
 
-  ctx.restore();
+  ctx.restore(); // 카메라 해제 (DPR 스케일 유지)
 
-  // 화면 공간 UI (HP바, 이름) — 항상 읽기 좋은 크기
+  // 화면 공간 UI — 논리 좌표 기준
   if(cam.zoom>0.15){
     for(const c of characters){
       if(!c.alive) continue;
-      const sx=canvas.width/2 +(c.wx-cam.x)*cam.zoom;
-      const sy=canvas.height/2+(c.wy-cam.y)*cam.zoom;
+      const sx=logW/2+(c.wx-cam.x)*cam.zoom;
+      const sy=logH/2+(c.wy-cam.y)*cam.zoom;
       c.drawUI(sx,sy);
     }
   }
+
+  ctx.restore(); // DPR 스케일 해제
 }
 
 // ── 시작/종료 ──
