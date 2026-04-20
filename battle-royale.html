@@ -500,12 +500,13 @@ class Character {
   updatePunch(dt,all){
     if(!this.activePunch) return;
     this.activePunch.timer+=dt;
-    const prog=this.activePunch.timer/250;
-    const ext=prog<.5?prog*2:(1-prog)*2;
+    const prog=this.activePunch.timer/140;
+    // 빠른 스냅 전진(0→0.35) 후 천천히 복귀 — 타격감 강조
+    const ext=prog<.35 ? (prog/.35) : Math.max(0,1-(prog-.35)/.65);
     const eLen=ARM_LEN*this.armMult;
     if(this.activePunch.arm==='left'){ this.leftArm.angle=this.activePunch.angle; this.leftArm.ext=ext*eLen; }
     else                              { this.rightArm.angle=this.activePunch.angle; this.rightArm.ext=ext*eLen; }
-    if(!this.activePunch.hit&&prog>=.45){ this.activePunch.hit=true; this.doHit(all); }
+    if(!this.activePunch.hit&&prog>=.32){ this.activePunch.hit=true; this.doHit(all); }
     if(prog>=1) this.activePunch=null;
   }
 
