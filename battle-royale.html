@@ -394,6 +394,11 @@ canvas { display:block; cursor:crosshair; }
     <div class="ctrl-item">클릭 — 공격 (1초 쿨다운)</div>
   </div>
   <div class="speed-control" id="speed-ctrl-panel">
+    <button id="btn-1p" onclick="toggle1P()" style="
+      background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+      border-radius:8px; padding:5px 14px; color:#aaa; font-size:.88rem;
+      cursor:pointer; transition:all .18s; white-space:nowrap;
+    ">🤖 자동</button>
     ⚡ 속도
     <input type="range" id="speed-slider" min="1" max="6" value="2" oninput="updateSpeed(this.value)"/>
     <span id="speed-label">2x</span>
@@ -1207,16 +1212,16 @@ function spawnCharacters(){
 
     // 멀티플레이: 플레이어 역할 배정
     if(gameMode==='host'){
-      if(i===myPlayerIndex){ c.isPlayer=true; }
+      if(i===myPlayerIndex){ c.isPlayer=false; } // 기본 AI, 1P 버튼으로 전환
       else if(i<mpPlayers.length){ c.isRemotePlayer=true; c.socketId=mpPlayers[i].id; }
-      // 나머지는 AI
-    } else {
-      if(i===myPlayerIndex) c.isPlayer=true;
+    } else if(gameMode==='client'){
+      if(i===myPlayerIndex) c.isPlayer=true; // 클라이언트는 항상 수동
     }
+    // solo: 모두 AI (isPlayer=false 기본값)
     return c;
   });
 
-  playerChar = characters[myPlayerIndex] || null;
+  playerChar = null; // 기본 자동, 1P 버튼으로 활성화
 
   items=[]; itemRespawnT=0;
   const itemCount=Math.max(2, Math.min(6, Math.ceil(n/2)));
@@ -1453,12 +1458,44 @@ function applyEvent(evt){
   }
 }
 
+// ── 1P 토글 ──
+let _manualControl = false;
+
+function toggle1P(){
+  _manualControl = !_manualControl;
+  const idx = (gameMode==='host'||gameMode==='solo') ? myPlayerIndex : myPlayerIndex;
+  const c = characters[idx];
+  if(c && c.alive){
+    c.isPlayer = _manualControl;
+    playerChar = _manualControl ? c : null;
+    if(!_manualControl){ keys.w=keys.a=keys.s=keys.d=false; playerAttackPressed=false; }
+  }
+  const btn=document.getElementById('btn-1p');
+  if(!btn) return;
+  if(_manualControl){
+    btn.textContent='🎮 1P 수동';
+    btn.style.background='linear-gradient(135deg,#e74c3c,#c0392b)';
+    btn.style.color='#fff'; btn.style.borderColor='transparent';
+  } else {
+    btn.textContent='🤖 자동';
+    btn.style.background='rgba(255,255,255,.1)';
+    btn.style.color='#aaa'; btn.style.borderColor='rgba(255,255,255,.2)';
+  }
+}
+
+function reset1P(){
+  _manualControl=false;
+  const btn=document.getElementById('btn-1p');
+  if(btn){ btn.textContent='🤖 자동'; btn.style.background='rgba(255,255,255,.1)'; btn.style.color='#aaa'; btn.style.borderColor='rgba(255,255,255,.2)'; }
+}
+
 // ── 시작/종료 ──
 function startGame(){
   if(participants.length<2) return;
   setCanvasSize(); spawnCharacters();
   particles=[]; logItems=[]; explosions=[]; dramaCam=null; gameRunning=true;
   playerAttackPressed=false; keys.w=keys.a=keys.s=keys.d=false;
+  reset1P();
   document.getElementById('setup-screen').style.display='none';
   document.getElementById('mp-screen').style.display='none';
   document.getElementById('game-screen').style.display='block';
@@ -1786,6 +1823,7 @@ function onGameStarted(players){
     spawnCharacters();
     particles=[]; logItems=[]; explosions=[]; dramaCam=null; gameRunning=true;
     playerAttackPressed=false; keys.w=keys.a=keys.s=keys.d=false;
+    reset1P();
     document.getElementById('mp-screen').style.display='none';
     document.getElementById('game-screen').style.display='block';
     document.getElementById('speed-ctrl-panel').style.display='';
