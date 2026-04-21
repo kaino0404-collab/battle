@@ -62,12 +62,6 @@ body {
   width:100%; max-width:540px; padding:28px 24px; gap:14px;
 }
 .mp-title { font-size:1.7rem; font-weight:900; color:#ff6b35; }
-.mp-tabs { display:flex; gap:8px; width:100%; }
-.mp-tab {
-  flex:1; padding:10px; background:rgba(255,255,255,.07); border:1.5px solid rgba(255,255,255,.12);
-  border-radius:10px; color:#ccc; cursor:pointer; font-size:.95rem; text-align:center; transition:all .15s;
-}
-.mp-tab.active { background:rgba(255,107,53,.2); border-color:#ff6b35; color:#ff6b35; font-weight:bold; }
 .mp-panel { width:100%; display:flex; flex-direction:column; gap:8px; }
 .lobby-box {
   width:100%; background:rgba(255,255,255,.04); border:1.5px solid rgba(255,255,255,.07);
@@ -169,30 +163,14 @@ canvas { display:block; cursor:crosshair; }
 
 <!-- 멀티플레이 화면 -->
 <div id="mp-screen">
-  <div class="mp-title">🌐 온라인 멀티플레이</div>
+  <div class="mp-title" id="mp-title-text">🌐 온라인 멀티플레이</div>
 
-  <div class="mp-tabs" id="mp-tabs">
-    <div class="mp-tab active" id="tab-create" onclick="mpTab('create')">🏠 방 만들기</div>
-    <div class="mp-tab"       id="tab-join"   onclick="mpTab('join')">🔗 방 참가</div>
-  </div>
-
-  <!-- 방 만들기 패널 -->
-  <div class="mp-panel" id="mp-create">
-    <input type="text" id="mp-name-create" class="name-input" placeholder="내 이름 (최대 8자)" maxlength="8"/>
+  <!-- 이름 입력 (방 만들기 / 참가 공통) -->
+  <div class="mp-panel" id="mp-entry">
+    <input type="text" id="mp-name" class="name-input" placeholder="내 이름 (최대 8자)" maxlength="8"/>
     <div class="btn-row">
       <button class="btn-back" onclick="showSetup()">← 뒤로</button>
-      <button class="btn-start" style="flex:1" onclick="createRoom()">방 만들기</button>
-    </div>
-  </div>
-
-  <!-- 방 참가 패널 -->
-  <div class="mp-panel" id="mp-join" style="display:none">
-    <input type="text" id="mp-room-code" class="name-input" placeholder="방 코드 (5자리)" maxlength="5"
-           oninput="this.value=this.value.toUpperCase()"/>
-    <input type="text" id="mp-name-join" class="name-input" placeholder="내 이름 (최대 8자)" maxlength="8"/>
-    <div class="btn-row">
-      <button class="btn-back" onclick="showSetup()">← 뒤로</button>
-      <button class="btn-start" style="flex:1" onclick="joinRoom()">참가하기</button>
+      <button class="btn-start" style="flex:1" id="btn-mp-entry" onclick="mpEntry()">방 만들기</button>
     </div>
   </div>
 
@@ -1323,12 +1301,18 @@ window.addEventListener('resize',()=>{ if(gameRunning) setCanvasSize(); });
 // ── 멀티플레이 UI ──
 // ════════════════════════════════════════
 
+let _urlRoomCode = new URLSearchParams(location.search).get('room')||'';
+
 function showMultiplayer(){
   document.getElementById('setup-screen').style.display='none';
   document.getElementById('mp-screen').style.display='flex';
-  // URL에 room 코드가 있으면 참가 탭으로 자동 전환
-  const urlRoom=new URLSearchParams(location.search).get('room');
-  if(urlRoom){ mpTab('join'); document.getElementById('mp-room-code').value=urlRoom.toUpperCase(); }
+  if(_urlRoomCode){
+    document.getElementById('mp-title-text').textContent='🔗 방 참가';
+    document.getElementById('btn-mp-entry').textContent='참가하기';
+  } else {
+    document.getElementById('mp-title-text').textContent='🌐 온라인 멀티플레이';
+    document.getElementById('btn-mp-entry').textContent='방 만들기';
+  }
 }
 
 function showSetup(){
@@ -1337,18 +1321,22 @@ function showSetup(){
   resetMpUI();
 }
 
-function mpTab(tab){
-  document.getElementById('mp-create').style.display=tab==='create'?'':'none';
-  document.getElementById('mp-join').style.display  =tab==='join'  ?'':'none';
-  document.getElementById('tab-create').className='mp-tab'+(tab==='create'?' active':'');
-  document.getElementById('tab-join').className  ='mp-tab'+(tab==='join'  ?' active':'');
-}
-
 function resetMpUI(){
   document.getElementById('mp-lobby').style.display='none';
-  document.getElementById('mp-tabs').style.display='';
-  mpTab('create');
+  document.getElementById('mp-entry').style.display='';
 }
+
+// ── 통합 진입점: 이름 입력 후 버튼 하나 ──
+function mpEntry(){
+  const name=document.getElementById('mp-name').value.trim();
+  if(!name){ alert('이름을 입력해주세요'); return; }
+  if(_urlRoomCode){ joinRoom(name); }
+  else            { createRoom(name); }
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp=document.getElementById('mp-name');
+  if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') mpEntry(); });
+});
 
 // ── 소켓 초기화 ──
 function initSocket(cb){
@@ -1358,7 +1346,6 @@ function initSocket(cb){
   s.onerror=()=>alert('서버에 연결할 수 없습니다.\nnode server.js를 먼저 실행해주세요.');
   s.onload=()=>{
     socket=io();
-
     socket.on('room-created',({roomId})=>onRoomCreated(roomId));
     socket.on('join-success',({playerIndex,players})=>onJoinSuccess(playerIndex,players));
     socket.on('join-error',msg=>{ alert('참가 실패: '+msg); });
@@ -1369,7 +1356,6 @@ function initSocket(cb){
     socket.on('player-input',({id,input})=>{ remoteInputMap[id]=input; });
     socket.on('room-closed',msg=>{ alert(msg); leaveRoom(); });
     socket.on('player-disconnected',({id})=>{
-      // 접속 끊긴 플레이어 → AI 전환
       const c=characters.find(ch=>ch.socketId===id);
       if(c){ c.isRemotePlayer=false; c.socketId=null; }
       delete remoteInputMap[id];
@@ -1380,31 +1366,24 @@ function initSocket(cb){
 }
 
 // ── 방 만들기 ──
-function createRoom(){
-  const name=document.getElementById('mp-name-create').value.trim();
-  if(!name){ alert('이름을 입력해주세요'); return; }
+function createRoom(name){
   initSocket(()=>socket.emit('create-room',{name}));
 }
 
 function onRoomCreated(roomId){
   gameMode='host'; myPlayerIndex=0;
-  mpPlayers=[{id:socket.id,name:document.getElementById('mp-name-create').value.trim()}];
+  mpPlayers=[{id:socket.id,name:document.getElementById('mp-name').value.trim()}];
   showLobby(roomId,true,mpPlayers);
 }
 
 // ── 방 참가 ──
-function joinRoom(){
-  const code=document.getElementById('mp-room-code').value.trim().toUpperCase();
-  const name=document.getElementById('mp-name-join').value.trim();
-  if(!code){ alert('방 코드를 입력해주세요'); return; }
-  if(!name){ alert('이름을 입력해주세요'); return; }
-  initSocket(()=>socket.emit('join-room',{roomId:code,name}));
+function joinRoom(name){
+  initSocket(()=>socket.emit('join-room',{roomId:_urlRoomCode,name}));
 }
 
 function onJoinSuccess(playerIndex,players){
   gameMode='client'; myPlayerIndex=playerIndex; mpPlayers=players;
-  const code=document.getElementById('mp-room-code').value.trim().toUpperCase();
-  showLobby(code,false,players);
+  showLobby(_urlRoomCode,false,players);
 }
 
 // ── 대기실 ──
@@ -1481,11 +1460,8 @@ function onGameStarted(players){
   }
 }
 
-// ── URL에 room 코드가 있으면 자동으로 멀티플레이 탭 열기 ──
-(function checkUrlRoom(){
-  const urlRoom=new URLSearchParams(location.search).get('room');
-  if(urlRoom) showMultiplayer();
-})();
+// URL에 room 코드가 있으면 자동으로 멀티플레이 화면 열기
+if(_urlRoomCode) showMultiplayer();
 </script>
 </body>
 </html>
