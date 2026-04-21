@@ -249,12 +249,14 @@ let playerAttackPressed = false;
 const keys       = { w:false, a:false, s:false, d:false };
 const mouseWorld = { x:0, y:0 };
 
-// ── 멀티플레이 ──
+// ── 멀티플레이 (PeerJS P2P) ──
 let gameMode      = 'solo'; // 'solo' | 'host' | 'client'
-let socket        = null;
+let peer          = null;   // 내 Peer 인스턴스
+let hostConn      = null;   // 클라이언트 → 호스트 연결
+let clientConns   = [];     // 호스트 → 클라이언트 연결 목록
 let myPlayerIndex = 0;
 let mpPlayers     = []; // [{id,name}]
-const remoteInputMap = {}; // socketId → {w,a,s,d,facing,attack}
+const remoteInputMap = {}; // peerId → {w,a,s,d,facing,attack}
 
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
@@ -350,8 +352,9 @@ function lighten(hex, amt){
 }
 function hexAlpha(hex,a){ const n=parseInt(hex.replace('#',''),16); return `rgba(${n>>16},${(n>>8)&0xff},${n&0xff},${a})`; }
 
-// ── 네트워크 이벤트 헬퍼 ──
-function netEvent(evt){ if(gameMode==='host'&&socket) socket.emit('game-event',evt); }
+// ── 네트워크 헬퍼 ──
+function broadcast(data){ for(const c of clientConns) if(c.open) c.send(data); }
+function netEvent(evt){ if(gameMode==='host') broadcast({t:'event',e:evt}); }
 
 // ── 파티클 ──
 class Particle {
@@ -1063,8 +1066,8 @@ function gameLoop(ts){
   shakeTimer=Math.max(0,shakeTimer-1);
 
   // 호스트: 상태를 클라이언트에 전송
-  if(gameMode==='host'&&socket){
-    socket.volatile.emit('game-state', serializeState());
+  if(gameMode==='host'&&clientConns.length>0){
+    broadcast({t:'state',s:serializeState()});
   }
 
   if(alive.length<=1&&gameRunning){
@@ -1099,22 +1102,17 @@ function clientGameLoop(ts){
   drawFrame();
   shakeTimer=Math.max(0,shakeTimer-1);
 
-  // 내 입력을 서버에 전송
   sendPlayerInput();
 
   animId=requestAnimationFrame(clientGameLoop);
 }
 
 function sendPlayerInput(){
-  if(!socket||gameMode!=='client') return;
+  if(!hostConn||!hostConn.open||gameMode!=='client') return;
   const c=characters[myPlayerIndex];
   if(!c||!c.alive) return;
   const dx=mouseWorld.x-c.wx, dy=mouseWorld.y-c.wy;
-  socket.volatile.emit('player-input',{
-    w:keys.w, a:keys.a, s:keys.s, d:keys.d,
-    facing:Math.atan2(dy,dx),
-    attack:playerAttackPressed
-  });
+  hostConn.send({t:'input',i:{w:keys.w,a:keys.a,s:keys.s,d:keys.d,facing:Math.atan2(dy,dx),attack:playerAttackPressed}});
   playerAttackPressed=false;
 }
 
@@ -1287,8 +1285,8 @@ function resetGame(){
   if(animId) cancelAnimationFrame(animId);
   gameRunning=false;
   playerChar=null; playerAttackPressed=false; keys.w=keys.a=keys.s=keys.d=false;
-  if(gameMode!=='solo'&&socket){ socket.disconnect(); socket=null; }
-  gameMode='solo'; myPlayerIndex=0; mpPlayers=[];
+  if(peer){ peer.destroy(); peer=null; }
+  hostConn=null; clientConns=[]; gameMode='solo'; myPlayerIndex=0; mpPlayers=[];
   document.getElementById('result-screen').style.display='none';
   document.getElementById('game-screen').style.display='none';
   document.getElementById('mp-screen').style.display='none';
@@ -1326,64 +1324,101 @@ function resetMpUI(){
   document.getElementById('mp-entry').style.display='';
 }
 
-// ── 통합 진입점: 이름 입력 후 버튼 하나 ──
+// ── 통합 진입점 ──
 function mpEntry(){
   const name=document.getElementById('mp-name').value.trim();
   if(!name){ alert('이름을 입력해주세요'); return; }
-  if(_urlRoomCode){ joinRoom(name); }
-  else            { createRoom(name); }
+  if(_urlRoomCode) joinRoom(name);
+  else             createRoom(name);
 }
 document.addEventListener('DOMContentLoaded',()=>{
   const inp=document.getElementById('mp-name');
   if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') mpEntry(); });
 });
 
-// ── 소켓 초기화 ──
-function initSocket(cb){
-  if(socket){ cb(); return; }
+// ── PeerJS 로드 ──
+function loadPeerJS(cb){
+  if(window.Peer){ cb(); return; }
   const s=document.createElement('script');
-  s.src='/socket.io/socket.io.js';
-  s.onerror=()=>alert('서버에 연결할 수 없습니다.\nnode server.js를 먼저 실행해주세요.');
-  s.onload=()=>{
-    socket=io();
-    socket.on('room-created',({roomId})=>onRoomCreated(roomId));
-    socket.on('join-success',({playerIndex,players})=>onJoinSuccess(playerIndex,players));
-    socket.on('join-error',msg=>{ alert('참가 실패: '+msg); });
-    socket.on('players-updated',players=>updateLobbyList(players));
-    socket.on('game-started',({players})=>onGameStarted(players));
-    socket.on('game-state',state=>{ if(gameMode==='client') applyState(state); });
-    socket.on('game-event',evt=>{ if(gameMode==='client') applyEvent(evt); });
-    socket.on('player-input',({id,input})=>{ remoteInputMap[id]=input; });
-    socket.on('room-closed',msg=>{ alert(msg); leaveRoom(); });
-    socket.on('player-disconnected',({id})=>{
-      const c=characters.find(ch=>ch.socketId===id);
-      if(c){ c.isRemotePlayer=false; c.socketId=null; }
-      delete remoteInputMap[id];
-    });
-    cb();
-  };
+  s.src='https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js';
+  s.onload=cb;
+  s.onerror=()=>alert('PeerJS 로드 실패. 인터넷 연결을 확인해주세요.');
   document.head.appendChild(s);
 }
 
-// ── 방 만들기 ──
+// ── 방 만들기 (호스트) ──
 function createRoom(name){
-  initSocket(()=>socket.emit('create-room',{name}));
+  const btn=document.getElementById('btn-mp-entry');
+  btn.disabled=true; btn.textContent='연결 중...';
+  loadPeerJS(()=>{
+    peer=new Peer();
+    peer.on('open', id=>{
+      gameMode='host'; myPlayerIndex=0;
+      mpPlayers=[{id, name}];
+      // 다른 플레이어 접속 대기
+      peer.on('connection', conn=>{
+        conn.on('open',()=>{
+          conn.on('data', data=>handleHostData(conn,data));
+          conn.on('close',()=>handleClientLeft(conn));
+          conn.on('error',()=>handleClientLeft(conn));
+        });
+      });
+      peer.on('error', err=>{ alert('오류: '+err.message); btn.disabled=false; btn.textContent='방 만들기'; });
+      showLobby(id, true, mpPlayers);
+      btn.disabled=false; btn.textContent='방 만들기';
+    });
+    peer.on('error', err=>{ alert('연결 오류: '+err.type+'\n인터넷 연결을 확인해주세요.'); btn.disabled=false; btn.textContent='방 만들기'; });
+  });
 }
 
-function onRoomCreated(roomId){
-  gameMode='host'; myPlayerIndex=0;
-  mpPlayers=[{id:socket.id,name:document.getElementById('mp-name').value.trim()}];
-  showLobby(roomId,true,mpPlayers);
+function handleHostData(conn, data){
+  if(data.t==='join'){
+    const idx=mpPlayers.length;
+    mpPlayers.push({id:conn.peer, name:data.name});
+    clientConns.push(conn);
+    conn.send({t:'join-ack', playerIndex:idx, players:mpPlayers});
+    broadcast({t:'players-updated', players:mpPlayers});
+    updateLobbyList(mpPlayers);
+  }
+  if(data.t==='input'){ remoteInputMap[conn.peer]=data.i; }
 }
 
-// ── 방 참가 ──
+function handleClientLeft(conn){
+  clientConns=clientConns.filter(c=>c!==conn);
+  mpPlayers=mpPlayers.filter(p=>p.id!==conn.peer);
+  delete remoteInputMap[conn.peer];
+  if(!gameRunning){ broadcast({t:'players-updated',players:mpPlayers}); updateLobbyList(mpPlayers); }
+  const c=characters.find(ch=>ch.socketId===conn.peer);
+  if(c){ c.isRemotePlayer=false; c.socketId=null; }
+}
+
+// ── 방 참가 (클라이언트) ──
 function joinRoom(name){
-  initSocket(()=>socket.emit('join-room',{roomId:_urlRoomCode,name}));
+  const btn=document.getElementById('btn-mp-entry');
+  btn.disabled=true; btn.textContent='연결 중...';
+  loadPeerJS(()=>{
+    peer=new Peer();
+    peer.on('open',()=>{
+      const conn=peer.connect(_urlRoomCode, {reliable:true});
+      hostConn=conn;
+      conn.on('open',()=>{
+        conn.send({t:'join', name});
+        conn.on('data', data=>handleClientData(data));
+        btn.disabled=false; btn.textContent='참가하기';
+      });
+      conn.on('close',()=>{ if(gameRunning){ alert('호스트 연결이 끊겼습니다'); resetGame(); } });
+      conn.on('error', err=>{ alert('참가 실패: '+err); btn.disabled=false; btn.textContent='참가하기'; });
+    });
+    peer.on('error', err=>{ alert('연결 오류: '+err.type); btn.disabled=false; btn.textContent='참가하기'; });
+  });
 }
 
-function onJoinSuccess(playerIndex,players){
-  gameMode='client'; myPlayerIndex=playerIndex; mpPlayers=players;
-  showLobby(_urlRoomCode,false,players);
+function handleClientData(data){
+  if(data.t==='join-ack'){ myPlayerIndex=data.playerIndex; mpPlayers=data.players; showLobby(_urlRoomCode,false,mpPlayers); }
+  if(data.t==='players-updated'){ updateLobbyList(data.players); }
+  if(data.t==='game-started'){ onGameStarted(data.players); }
+  if(data.t==='state'){ applyState(data.s); }
+  if(data.t==='event'){ applyEvent(data.e); }
 }
 
 // ── 대기실 ──
@@ -1392,8 +1427,10 @@ function showLobby(roomId,isHost,players){
   document.getElementById('mp-join').style.display='none';
   document.getElementById('mp-tabs').style.display='none';
   document.getElementById('mp-lobby').style.display='';
-  document.getElementById('lobby-code').textContent=roomId;
-  document.getElementById('lobby-link').dataset.url=`${location.origin}/?room=${roomId}`;
+  const shortCode=roomId.substring(0,8).toUpperCase();
+  document.getElementById('lobby-code').textContent=shortCode;
+  const base=location.href.split('?')[0];
+  document.getElementById('lobby-link').dataset.url=`${base}?room=${roomId}`;
   document.getElementById('lobby-link').textContent='🔗 링크 복사하기';
   updateLobbyList(players);
   document.getElementById('btn-mp-start').style.display=isHost?'':'none';
@@ -1426,22 +1463,23 @@ function copyLink(){
 }
 
 function leaveRoom(){
-  if(socket){ socket.disconnect(); socket=null; }
+  if(peer){ peer.destroy(); peer=null; }
+  hostConn=null; clientConns=[];
   gameMode='solo'; myPlayerIndex=0; mpPlayers=[];
   resetMpUI();
   showSetup();
 }
 
 function mpStartGame(){
-  if(gameMode!=='host'||!socket) return;
-  socket.emit('start-game');
+  if(gameMode!=='host') return;
+  broadcast({t:'game-started', players:mpPlayers});
+  onGameStarted(mpPlayers);
 }
 
 function onGameStarted(players){
   participants=players.map(p=>typeof p==='string'?p:p.name);
   mpPlayers=players;
   if(gameMode==='host'){
-    // 호스트: 일반 게임 시작 (spawnCharacters 내에서 init 이벤트 전송)
     setCanvasSize();
     spawnCharacters();
     particles=[]; logItems=[]; explosions=[]; dramaCam=null; gameRunning=true;
@@ -1453,7 +1491,6 @@ function onGameStarted(players){
     lastTime=performance.now();
     animId=requestAnimationFrame(gameLoop);
   } else {
-    // 클라이언트: init 이벤트를 기다림 (applyEvent에서 처리)
     setCanvasSize();
     document.getElementById('speed-ctrl-panel').style.display='none';
     playerAttackPressed=false; keys.w=keys.a=keys.s=keys.d=false;
