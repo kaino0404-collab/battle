@@ -180,6 +180,34 @@ body {
   display:flex; gap:8px; align-items:center; flex-wrap:wrap;
 }
 .lobby-status-txt { flex:1; color:#888; font-size:.85rem; }
+/* 초대 링크 박스 */
+.invite-box {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:10px 14px; background:rgba(255,215,0,.08);
+  border:1px solid rgba(255,215,0,.22); border-radius:10px;
+}
+.invite-code {
+  font-size:1.45rem; font-weight:900; letter-spacing:.12em; color:#ffd700;
+  text-shadow:0 0 12px rgba(255,215,0,.35);
+}
+.invite-url {
+  flex:1; font-size:.75rem; color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  min-width:0;
+}
+.btn-copy {
+  background:rgba(255,215,0,.18); border:1px solid rgba(255,215,0,.35);
+  border-radius:8px; padding:6px 14px; color:#ffd700; font-size:.82rem;
+  cursor:pointer; white-space:nowrap; transition:all .15s; font-weight:bold;
+}
+.btn-copy:hover { background:rgba(255,215,0,.32); }
+/* URL 직접 참가 배너 */
+.direct-join-banner {
+  padding:14px 16px; background:rgba(46,204,113,.1);
+  border:1px solid rgba(46,204,113,.3); border-radius:10px;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+}
+.direct-join-banner .dj-code { font-size:1.2rem; font-weight:900; color:#2ecc71; letter-spacing:.1em; }
+.direct-join-banner .dj-label { flex:1; color:#aaa; font-size:.85rem; }
 .btn-back {
   background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
   border-radius:10px; padding:10px 18px; color:#ccc; cursor:pointer; font-size:.9rem; transition:all .15s;
@@ -288,12 +316,18 @@ canvas { display:block; cursor:crosshair; }
 
   <!-- 방 브라우저 -->
   <div id="mp-browser">
-    <div class="mp-title">🌐 온라인 멀티플레이</div>
+    <div class="mp-title" id="mp-browser-title">🌐 온라인 멀티플레이</div>
     <div class="mp-name-row">
       <input type="text" id="mp-name" class="name-input" placeholder="내 닉네임 (최대 8자)" maxlength="8" style="flex:1"/>
       <div class="connect-badge" id="connect-badge">연결 중...</div>
     </div>
-    <div class="room-browser-box">
+    <!-- URL로 직접 들어온 경우 표시되는 배너 -->
+    <div class="direct-join-banner" id="direct-join-banner" style="display:none">
+      <span>🎯</span>
+      <span class="dj-label">초대받은 방:</span>
+      <span class="dj-code" id="dj-code"></span>
+    </div>
+    <div class="room-browser-box" id="room-browser-box">
       <div class="room-browser-hdr">
         <span>🏠 방 목록</span>
         <button class="btn-refresh" onclick="refreshRooms()">🔄 새로고침</button>
@@ -304,7 +338,7 @@ canvas { display:block; cursor:crosshair; }
     </div>
     <div class="btn-row">
       <button class="btn-back" onclick="showSetup()">← 뒤로</button>
-      <button class="btn-start" id="btn-create-room" onclick="doCreateRoom()" style="flex:1">+ 새 방 만들기</button>
+      <button class="btn-start" id="btn-create-room" onclick="doCreateOrJoin()" style="flex:1">+ 새 방 만들기</button>
     </div>
   </div>
 
@@ -313,6 +347,13 @@ canvas { display:block; cursor:crosshair; }
     <div class="lobby-header">
       <div class="lobby-room-title" id="lobby-room-title">대기실</div>
       <div class="lobby-count-badge" id="lobby-count-badge">0 / 50명</div>
+    </div>
+    <!-- 방장에게만 보이는 초대 링크 박스 -->
+    <div class="invite-box" id="invite-box" style="display:none">
+      <span>🔗</span>
+      <span class="invite-code" id="invite-code"></span>
+      <span class="invite-url" id="invite-url"></span>
+      <button class="btn-copy" onclick="copyInviteLink()">링크 복사</button>
     </div>
     <div class="lobby-body">
       <div class="lobby-players-col">
@@ -1453,11 +1494,23 @@ window.addEventListener('resize',()=>{ if(gameRunning) setCanvasSize(); });
 // ── 멀티플레이 UI (Socket.io) ──
 // ════════════════════════════════════════
 
+const _urlRoomCode = new URLSearchParams(location.search).get('room')||'';
+
 function showMultiplayer(){
   document.getElementById('setup-screen').style.display='none';
   document.getElementById('mp-screen').style.display='flex';
   document.getElementById('mp-browser').style.display='flex';
   document.getElementById('mp-lobby').style.display='none';
+
+  if(_urlRoomCode){
+    // URL에 방 코드가 있으면 직접 참가 UI
+    document.getElementById('mp-browser-title').textContent='🔗 방 초대';
+    document.getElementById('direct-join-banner').style.display='flex';
+    document.getElementById('dj-code').textContent=_urlRoomCode.toUpperCase();
+    document.getElementById('room-browser-box').style.display='none';
+    document.getElementById('btn-create-room').textContent='참가하기';
+  }
+
   if(!socket || !socket.connected) connectToServer();
 }
 
@@ -1562,6 +1615,12 @@ function refreshRooms(){
   if(socket && socket.connected) socket.emit('join-global-lobby');
 }
 
+// ── URL 버튼 분기 ──
+function doCreateOrJoin(){
+  if(_urlRoomCode) doJoinRoom(_urlRoomCode);
+  else             doCreateRoom();
+}
+
 // ── 방 만들기 ──
 function doCreateRoom(){
   const name=document.getElementById('mp-name').value.trim();
@@ -1590,7 +1649,30 @@ function showLobby(isHost, players){
   document.getElementById('lobby-status').textContent=isHost
     ? '✅ 방이 만들어졌습니다. 친구들이 참가하면 시작하세요!'
     : '⏳ 방장이 게임을 시작하기를 기다리는 중...';
+
+  // 방장에게 초대 링크 표시
+  const inviteBox=document.getElementById('invite-box');
+  if(isHost && currentRoomId){
+    const base=location.href.split('?')[0];
+    const url=`${base}?room=${currentRoomId}`;
+    document.getElementById('invite-code').textContent=currentRoomId;
+    document.getElementById('invite-url').textContent=url;
+    document.getElementById('invite-url').dataset.url=url;
+    inviteBox.style.display='flex';
+  } else {
+    inviteBox.style.display='none';
+  }
+
   updateLobbyList(players);
+}
+
+function copyInviteLink(){
+  const url=document.getElementById('invite-url').dataset.url;
+  const btn=document.querySelector('.btn-copy');
+  navigator.clipboard.writeText(url).then(()=>{
+    btn.textContent='✅ 복사됨!';
+    setTimeout(()=>btn.textContent='링크 복사',2000);
+  }).catch(()=>{ prompt('아래 링크를 복사하세요:',url); });
 }
 
 function updateLobbyList(players){
@@ -1716,6 +1798,9 @@ function onGameStarted(players){
     playerAttackPressed=false; keys.w=keys.a=keys.s=keys.d=false;
   }
 }
+
+// URL에 ?room= 코드가 있으면 자동으로 멀티플레이 화면 열기
+if(_urlRoomCode) showMultiplayer();
 </script>
 </body>
 </html>
