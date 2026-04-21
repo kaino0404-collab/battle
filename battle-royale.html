@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🥊 배틀 로얄 서바이벌</title>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.1/dist/peerjs.min.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
@@ -59,36 +59,132 @@ body {
 
 /* ── 멀티플레이 스크린 ── */
 #mp-screen {
-  display:none; flex-direction:column; align-items:center;
-  width:100%; max-width:540px; padding:28px 24px; gap:14px;
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  width:100%; min-height:100vh;
 }
-.mp-title { font-size:1.7rem; font-weight:900; color:#ff6b35; }
-.mp-panel { width:100%; display:flex; flex-direction:column; gap:8px; }
-.lobby-box {
-  width:100%; background:rgba(255,255,255,.04); border:1.5px solid rgba(255,255,255,.07);
-  border-radius:12px; padding:16px;
+.mp-title { font-size:1.7rem; font-weight:900; color:#ff6b35; text-align:center; }
+
+/* 방 브라우저 */
+#mp-browser {
+  width:100%; max-width:600px; padding:28px 24px;
+  display:flex; flex-direction:column; gap:14px;
 }
-.room-code {
-  font-size:2.6rem; font-weight:900; letter-spacing:.22em; text-align:center;
-  color:#ffd700; text-shadow:0 0 20px rgba(255,215,0,.4);
-  padding:10px; background:rgba(255,215,0,.07); border-radius:10px;
+.mp-name-row { display:flex; gap:8px; width:100%; }
+.connect-badge {
+  font-size:.75rem; padding:3px 10px; border-radius:20px;
+  background:rgba(255,255,255,.08); color:#888;
+  display:flex; align-items:center; gap:4px; white-space:nowrap;
 }
-.room-link {
-  font-size:.78rem; color:#666; text-align:center; margin-top:6px;
-  cursor:pointer; transition:all .15s; padding:5px; border-radius:6px; display:block;
+.connect-badge.ok  { background:rgba(46,204,113,.18); color:#2ecc71; }
+.connect-badge.err { background:rgba(231,76,60,.18); color:#e74c3c; }
+.room-browser-box {
+  width:100%; background:rgba(255,255,255,.04);
+  border:1.5px solid rgba(255,255,255,.07); border-radius:14px; overflow:hidden;
 }
-.room-link:hover { color:#ddd; background:rgba(255,255,255,.06); }
-.player-list { list-style:none; display:flex; flex-direction:column; gap:6px; margin-top:10px; }
-.player-list li {
-  background:rgba(255,255,255,.06); border-radius:8px; padding:7px 12px;
-  font-size:.9rem; display:flex; align-items:center; gap:8px;
+.room-browser-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.06);
+  font-size:.85rem; color:#aaa;
 }
+.btn-refresh {
+  background:none; border:1px solid rgba(255,255,255,.15); border-radius:7px;
+  padding:4px 12px; color:#aaa; font-size:.8rem; cursor:pointer; transition:all .15s;
+}
+.btn-refresh:hover { background:rgba(255,255,255,.1); color:#fff; }
+.room-list-scroll { max-height:260px; overflow-y:auto; }
+.room-item {
+  display:flex; align-items:center; gap:12px; padding:11px 14px;
+  border-bottom:1px solid rgba(255,255,255,.04); transition:background .12s;
+}
+.room-item:last-child { border-bottom:none; }
+.room-item:hover { background:rgba(255,255,255,.06); }
+.room-host-name { font-weight:bold; font-size:.95rem; flex:1; }
+.room-host-name span { color:#ffd700; margin-right:4px; }
+.room-player-count { color:#888; font-size:.82rem; white-space:nowrap; }
+.btn-join {
+  background:linear-gradient(135deg,#2ecc71,#27ae60); border:none; border-radius:8px;
+  padding:6px 16px; color:#fff; font-weight:bold; cursor:pointer; font-size:.85rem;
+  transition:all .15s; white-space:nowrap;
+}
+.btn-join:hover { transform:scale(1.05); }
+.room-list-empty {
+  padding:32px 16px; text-align:center; color:#555; font-size:.9rem; line-height:1.7;
+}
+
+/* 대기실 (로비) */
+#mp-lobby {
+  display:none; width:100%; max-width:980px; min-height:82vh;
+  padding:24px 28px; flex-direction:column; gap:14px;
+}
+.lobby-header {
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+}
+.lobby-room-title { font-size:1.4rem; font-weight:900; color:#ff6b35; }
+.lobby-count-badge {
+  background:rgba(255,215,0,.14); border:1px solid rgba(255,215,0,.3);
+  border-radius:20px; padding:3px 14px; color:#ffd700; font-size:.88rem; font-weight:bold;
+}
+.lobby-body {
+  display:flex; gap:16px; flex:1; min-height:0;
+}
+.lobby-players-col {
+  flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;
+}
+.lobby-chat-col {
+  flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;
+}
+.col-label { font-size:.78rem; color:#888; font-weight:bold; letter-spacing:.06em; text-transform:uppercase; }
+.player-list-big {
+  list-style:none; display:flex; flex-direction:column; gap:5px;
+  flex:1; overflow-y:auto; max-height:420px;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);
+  border-radius:12px; padding:8px;
+}
+.player-list-big li {
+  display:flex; align-items:center; gap:9px; padding:8px 12px;
+  border-radius:8px; font-size:.9rem; background:rgba(255,255,255,.04);
+  transition:background .12s;
+}
+.player-list-big li:hover { background:rgba(255,255,255,.08); }
+.player-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.player-tag { font-size:.72rem; padding:2px 7px; border-radius:10px; font-weight:bold; }
+.tag-host { background:rgba(255,215,0,.2); color:#ffd700; }
+.tag-me   { background:rgba(255,107,53,.2); color:#ff6b35; }
+.chat-box-big {
+  flex:1; display:flex; flex-direction:column;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);
+  border-radius:12px; overflow:hidden;
+}
+.chat-msgs-big {
+  flex:1; overflow-y:auto; padding:10px 12px;
+  display:flex; flex-direction:column; gap:5px;
+  max-height:380px; min-height:120px;
+}
+.chat-msg-row { font-size:.85rem; line-height:1.45; word-break:break-all; }
+.chat-msg-row .cn { font-weight:bold; }
+.chat-sys { color:#ffd700; font-size:.82rem; font-style:italic; }
+.chat-input-bar {
+  display:flex; gap:0; border-top:1px solid rgba(255,255,255,.06);
+}
+.chat-input-big {
+  flex:1; background:transparent; border:none; outline:none;
+  padding:9px 14px; color:#fff; font-size:.88rem;
+}
+.chat-input-big::placeholder { color:#444; }
+.chat-send {
+  background:rgba(255,107,53,.7); border:none; padding:9px 18px;
+  color:#fff; font-size:.85rem; cursor:pointer; transition:background .15s;
+}
+.chat-send:hover { background:rgba(255,107,53,1); }
+.lobby-footer {
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+}
+.lobby-status-txt { flex:1; color:#888; font-size:.85rem; }
 .btn-back {
   background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
   border-radius:10px; padding:10px 18px; color:#ccc; cursor:pointer; font-size:.9rem; transition:all .15s;
 }
 .btn-back:hover { background:rgba(255,255,255,.15); color:#fff; }
-.status-msg { color:#888; font-size:.88rem; text-align:center; }
 
 #game-screen { display:none; position:relative; }
 canvas { display:block; cursor:crosshair; }
@@ -141,30 +237,7 @@ canvas { display:block; cursor:crosshair; }
 }
 .btn-restart:hover { transform:translateY(-2px); box-shadow:0 6px 26px rgba(46,204,113,.6); }
 
-/* ── 채팅 ── */
-.chat-area {
-  width:100%; margin-top:10px;
-  background:rgba(255,255,255,.04); border:1.5px solid rgba(255,255,255,.07);
-  border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:6px;
-}
-.chat-label { color:#888; font-size:.76rem; margin-bottom:2px; }
-.chat-messages {
-  height:110px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;
-  scrollbar-width:thin; scrollbar-color:#333 transparent;
-}
-.chat-msg { font-size:.82rem; line-height:1.4; word-break:break-all; }
-.chat-msg .cn { font-weight:bold; }
-.chat-input-row { display:flex; gap:6px; margin-top:4px; }
-.chat-input {
-  flex:1; background:rgba(255,255,255,.07); border:1.5px solid rgba(255,255,255,.12);
-  border-radius:8px; padding:7px 10px; color:#fff; font-size:.85rem; outline:none;
-}
-.chat-input:focus { border-color:#ff6b35; }
-.chat-send-btn {
-  background:rgba(255,107,53,.8); border:none; border-radius:8px;
-  padding:7px 14px; color:#fff; font-size:.85rem; cursor:pointer; transition:all .15s;
-}
-.chat-send-btn:hover { background:rgba(255,107,53,1); }
+
 
 /* ── 인게임 채팅 오버레이 ── */
 #game-chat-overlay {
@@ -212,39 +285,58 @@ canvas { display:block; cursor:crosshair; }
 
 <!-- 멀티플레이 화면 -->
 <div id="mp-screen">
-  <div class="mp-title" id="mp-title-text">🌐 온라인 멀티플레이</div>
 
-  <!-- 이름 입력 (방 만들기 / 참가 공통) -->
-  <div class="mp-panel" id="mp-entry">
-    <input type="text" id="mp-name" class="name-input" placeholder="내 이름 (최대 8자)" maxlength="8"/>
-    <div class="btn-row">
-      <button class="btn-back" onclick="showSetup()">← 뒤로</button>
-      <button class="btn-start" style="flex:1" id="btn-mp-entry" onclick="mpEntry()">방 만들기</button>
+  <!-- 방 브라우저 -->
+  <div id="mp-browser">
+    <div class="mp-title">🌐 온라인 멀티플레이</div>
+    <div class="mp-name-row">
+      <input type="text" id="mp-name" class="name-input" placeholder="내 닉네임 (최대 8자)" maxlength="8" style="flex:1"/>
+      <div class="connect-badge" id="connect-badge">연결 중...</div>
     </div>
-  </div>
-
-  <!-- 대기실 -->
-  <div id="mp-lobby" style="display:none;width:100%">
-    <div class="lobby-box">
-      <div style="color:#aaa;font-size:.78rem;text-align:center;margin-bottom:6px">방 코드 — 친구에게 공유하세요</div>
-      <div class="room-code" id="lobby-code">-</div>
-      <span class="room-link" id="lobby-link" onclick="copyLink()">🔗 링크 복사하기</span>
-      <ul class="player-list" id="player-list"></ul>
-    </div>
-    <div class="status-msg" id="lobby-status"></div>
-    <div class="chat-area">
-      <div class="chat-label">💬 채팅</div>
-      <div class="chat-messages" id="lobby-chat-msgs"></div>
-      <div class="chat-input-row">
-        <input type="text" id="lobby-chat-input" class="chat-input" placeholder="메시지 입력..." maxlength="80"/>
-        <button class="chat-send-btn" onclick="sendLobbyChat()">전송</button>
+    <div class="room-browser-box">
+      <div class="room-browser-hdr">
+        <span>🏠 방 목록</span>
+        <button class="btn-refresh" onclick="refreshRooms()">🔄 새로고침</button>
+      </div>
+      <div class="room-list-scroll" id="room-list-scroll">
+        <div class="room-list-empty">서버에 연결 중입니다...</div>
       </div>
     </div>
-    <div class="btn-row" style="margin-top:8px">
-      <button class="btn-back" onclick="leaveRoom()">나가기</button>
-      <button class="btn-start" id="btn-mp-start" style="flex:1;display:none" onclick="mpStartGame()">⚔️ 게임 시작!</button>
+    <div class="btn-row">
+      <button class="btn-back" onclick="showSetup()">← 뒤로</button>
+      <button class="btn-start" id="btn-create-room" onclick="doCreateRoom()" style="flex:1">+ 새 방 만들기</button>
     </div>
   </div>
+
+  <!-- 대기실 (로비) -->
+  <div id="mp-lobby">
+    <div class="lobby-header">
+      <div class="lobby-room-title" id="lobby-room-title">대기실</div>
+      <div class="lobby-count-badge" id="lobby-count-badge">0 / 50명</div>
+    </div>
+    <div class="lobby-body">
+      <div class="lobby-players-col">
+        <div class="col-label">참가자</div>
+        <ul class="player-list-big" id="player-list-big"></ul>
+      </div>
+      <div class="lobby-chat-col">
+        <div class="col-label">💬 채팅</div>
+        <div class="chat-box-big">
+          <div class="chat-msgs-big" id="lobby-chat-msgs"></div>
+          <div class="chat-input-bar">
+            <input type="text" id="lobby-chat-input" class="chat-input-big" placeholder="메시지 입력 후 Enter..." maxlength="100"/>
+            <button class="chat-send" onclick="sendLobbyChat()">전송</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lobby-footer">
+      <div class="lobby-status-txt" id="lobby-status"></div>
+      <button class="btn-back" onclick="leaveRoom()">나가기</button>
+      <button class="btn-start" id="btn-mp-start" style="display:none" onclick="mpStartGame()">⚔️ 게임 시작!</button>
+    </div>
+  </div>
+
 </div>
 
 <div id="game-screen">
@@ -312,14 +404,14 @@ let playerAttackPressed = false;
 const keys       = { w:false, a:false, s:false, d:false };
 const mouseWorld = { x:0, y:0 };
 
-// ── 멀티플레이 (PeerJS P2P) ──
+// ── 멀티플레이 (Socket.io) ──
 let gameMode      = 'solo'; // 'solo' | 'host' | 'client'
-let peer          = null;   // 내 Peer 인스턴스
-let hostConn      = null;   // 클라이언트 → 호스트 연결
-let clientConns   = [];     // 호스트 → 클라이언트 연결 목록
+let socket        = null;
+let mySocketId    = '';
+let currentRoomId = null;
 let myPlayerIndex = 0;
 let mpPlayers     = []; // [{id,name}]
-const remoteInputMap = {}; // peerId → {w,a,s,d,facing,attack}
+const remoteInputMap = {}; // socketId → {w,a,s,d,facing,attack}
 
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
@@ -416,8 +508,7 @@ function lighten(hex, amt){
 function hexAlpha(hex,a){ const n=parseInt(hex.replace('#',''),16); return `rgba(${n>>16},${(n>>8)&0xff},${n&0xff},${a})`; }
 
 // ── 네트워크 헬퍼 ──
-function broadcast(data){ for(const c of clientConns) if(c.open) c.send(data); }
-function netEvent(evt){ if(gameMode==='host') broadcast({t:'event',e:evt}); }
+function netEvent(evt){ if(gameMode==='host' && socket) socket.emit('game-event', evt); }
 
 // ── 파티클 ──
 class Particle {
@@ -1091,13 +1182,13 @@ function spawnCharacters(){
   for(let i=0;i<itemCount;i++) items.push(new Item());
 
   // 호스트: 클라이언트에게 초기화 정보 전송
-  if(gameMode==='host'){
-    broadcast({t:'event', e:{
+  if(gameMode==='host' && socket){
+    socket.emit('game-event',{
       t:'init',
       params:{ARENA_R,CHAR_R,ARM_LEN,FIST_R,PUNCH_RANGE},
       chars:characters.map(c=>({name:c.name,color:c.color})),
       items:items.map(it=>({type:it.type,wx:it.wx,wy:it.wy}))
-    }});
+    });
   }
 }
 
@@ -1129,8 +1220,8 @@ function gameLoop(ts){
   shakeTimer=Math.max(0,shakeTimer-1);
 
   // 호스트: 상태를 클라이언트에 전송
-  if(gameMode==='host'&&clientConns.length>0){
-    broadcast({t:'state',s:serializeState()});
+  if(gameMode==='host' && socket && socket.connected){
+    socket.emit('game-state', serializeState());
   }
 
   if(alive.length<=1&&gameRunning){
@@ -1171,11 +1262,11 @@ function clientGameLoop(ts){
 }
 
 function sendPlayerInput(){
-  if(!hostConn||!hostConn.open||gameMode!=='client') return;
+  if(!socket||!socket.connected||gameMode!=='client') return;
   const c=characters[myPlayerIndex];
   if(!c||!c.alive) return;
   const dx=mouseWorld.x-c.wx, dy=mouseWorld.y-c.wy;
-  hostConn.send({t:'input',i:{w:keys.w,a:keys.a,s:keys.s,d:keys.d,facing:Math.atan2(dy,dx),attack:playerAttackPressed}});
+  socket.emit('player-input',{w:keys.w,a:keys.a,s:keys.s,d:keys.d,facing:Math.atan2(dy,dx),attack:playerAttackPressed});
   playerAttackPressed=false;
 }
 
@@ -1348,8 +1439,8 @@ function resetGame(){
   if(animId) cancelAnimationFrame(animId);
   gameRunning=false;
   playerChar=null; playerAttackPressed=false; keys.w=keys.a=keys.s=keys.d=false;
-  if(peer){ peer.destroy(); peer=null; }
-  hostConn=null; clientConns=[]; gameMode='solo'; myPlayerIndex=0; mpPlayers=[];
+  if(socket){ socket.disconnect(); socket=null; }
+  currentRoomId=null; gameMode='solo'; myPlayerIndex=0; mpPlayers=[];
   document.getElementById('result-screen').style.display='none';
   document.getElementById('game-screen').style.display='none';
   document.getElementById('mp-screen').style.display='none';
@@ -1359,223 +1450,215 @@ function resetGame(){
 window.addEventListener('resize',()=>{ if(gameRunning) setCanvasSize(); });
 
 // ════════════════════════════════════════
-// ── 멀티플레이 UI ──
+// ── 멀티플레이 UI (Socket.io) ──
 // ════════════════════════════════════════
-
-let _urlRoomCode = new URLSearchParams(location.search).get('room')||'';
 
 function showMultiplayer(){
   document.getElementById('setup-screen').style.display='none';
   document.getElementById('mp-screen').style.display='flex';
-  if(_urlRoomCode){
-    document.getElementById('mp-title-text').textContent='🔗 방 참가';
-    document.getElementById('btn-mp-entry').textContent='참가하기';
-  } else {
-    document.getElementById('mp-title-text').textContent='🌐 온라인 멀티플레이';
-    document.getElementById('btn-mp-entry').textContent='방 만들기';
-  }
+  document.getElementById('mp-browser').style.display='flex';
+  document.getElementById('mp-lobby').style.display='none';
+  if(!socket || !socket.connected) connectToServer();
 }
 
 function showSetup(){
+  if(socket){ socket.disconnect(); socket=null; }
+  currentRoomId=null; mpPlayers=[]; myPlayerIndex=0; gameMode='solo';
   document.getElementById('mp-screen').style.display='none';
   document.getElementById('setup-screen').style.display='';
-  resetMpUI();
 }
 
-function resetMpUI(){
-  document.getElementById('mp-lobby').style.display='none';
-  document.getElementById('mp-entry').style.display='';
+// ── 서버 연결 ──
+function connectToServer(){
+  const SERVER_URL = location.protocol==='file:' ? 'http://localhost:3000' : location.origin;
+  socket = io(SERVER_URL, {transports:['websocket','polling']});
+
+  socket.on('connect', ()=>{
+    mySocketId=socket.id;
+    setBadge(true);
+    socket.emit('join-global-lobby');
+    setupSocketListeners();
+  });
+  socket.on('connect_error', ()=>{
+    setBadge(false);
+    document.getElementById('room-list-scroll').innerHTML=
+      '<div class="room-list-empty">⚠️ 서버에 연결할 수 없습니다.<br>터미널에서 <b>node server.js</b>를 실행하거나<br><b>http://localhost:3000</b>으로 접속해주세요.</div>';
+  });
 }
 
-// ── 통합 진입점 ──
-function mpEntry(){
+function setBadge(ok){
+  const b=document.getElementById('connect-badge');
+  if(!b) return;
+  b.className='connect-badge'+(ok?' ok':' err');
+  b.textContent=ok?'✅ 연결됨':'❌ 연결 안됨';
+}
+
+function setupSocketListeners(){
+  socket.on('room-list', list => renderRoomList(list));
+
+  socket.on('room-created', ({roomId})=>{
+    currentRoomId=roomId;
+    gameMode='host'; myPlayerIndex=0;
+    showLobby(true, mpPlayers);
+  });
+
+  socket.on('join-success', ({playerIndex, players})=>{
+    myPlayerIndex=playerIndex; mpPlayers=players;
+    showLobby(false, players);
+  });
+
+  socket.on('join-error', msg=>{ alert('참가 실패: '+msg); });
+
+  socket.on('players-updated', players=>{
+    mpPlayers=players;
+    updateLobbyList(players);
+  });
+
+  socket.on('chat-message', ({name, msg})=>{
+    addChatMsg(name, msg, !gameRunning);
+  });
+
+  socket.on('game-started', ({players})=>{ onGameStarted(players); });
+
+  socket.on('game-state', state=>{ applyState(state); });
+
+  socket.on('game-event', evt=>{ applyEvent(evt); });
+
+  socket.on('player-input', ({id, input})=>{
+    remoteInputMap[id]=input;
+  });
+
+  socket.on('player-disconnected', ({id})=>{
+    delete remoteInputMap[id];
+    const c=characters.find(ch=>ch.socketId===id);
+    if(c){ c.isRemotePlayer=false; c.socketId=null; }
+  });
+
+  socket.on('room-closed', msg=>{
+    alert(msg);
+    currentRoomId=null; mpPlayers=[]; gameMode='solo';
+    document.getElementById('mp-lobby').style.display='none';
+    document.getElementById('mp-browser').style.display='flex';
+    socket.emit('join-global-lobby');
+  });
+}
+
+// ── 방 목록 렌더링 ──
+function renderRoomList(list){
+  const el=document.getElementById('room-list-scroll');
+  if(!list||list.length===0){
+    el.innerHTML='<div class="room-list-empty">아직 열린 방이 없습니다.<br>아래 버튼으로 새 방을 만드세요!</div>';
+    return;
+  }
+  el.innerHTML=list.map(r=>`
+    <div class="room-item">
+      <div class="room-host-name"><span>👑</span>${r.hostName}의 방</div>
+      <div class="room-player-count">${r.playerCount} / ${r.maxPlayers}명</div>
+      <button class="btn-join" onclick="doJoinRoom('${r.id}')">참가하기</button>
+    </div>`).join('');
+}
+
+function refreshRooms(){
+  if(socket && socket.connected) socket.emit('join-global-lobby');
+}
+
+// ── 방 만들기 ──
+function doCreateRoom(){
   const name=document.getElementById('mp-name').value.trim();
-  if(!name){ alert('이름을 입력해주세요'); return; }
-  if(_urlRoomCode) joinRoom(name);
-  else             createRoom(name);
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  const inp=document.getElementById('mp-name');
-  if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') mpEntry(); });
-});
-
-// ── 방 만들기 (호스트) ──
-function createRoom(name){
-  gameMode='host'; myPlayerIndex=0;
-  mpPlayers=[{id:'__pending__', name}];
-  // 즉시 대기실 표시
-  showLobby('__pending__', true, mpPlayers);
-  document.getElementById('lobby-code').textContent='...';
-  document.getElementById('lobby-status').textContent='🔄 방 코드를 받아오는 중...';
-
-  peer=new Peer();
-  peer.on('open', id=>{
-    mpPlayers[0].id=id;
-    const base=location.href.split('?')[0];
-    document.getElementById('lobby-code').textContent=id.substring(0,8).toUpperCase();
-    document.getElementById('lobby-link').dataset.url=`${base}?room=${id}`;
-    document.getElementById('lobby-status').textContent='✅ 방이 생성됐습니다. 친구에게 링크를 공유하세요!';
-    updateLobbyList(mpPlayers);
-    // 클라이언트 접속 대기
-    peer.on('connection', conn=>{
-      conn.on('open',()=>{
-        conn.on('data', data=>handleHostData(conn,data));
-        conn.on('close',()=>handleClientLeft(conn));
-        conn.on('error',()=>handleClientLeft(conn));
-      });
-    });
-  });
-  peer.on('error', err=>{
-    document.getElementById('lobby-status').textContent='⚠️ 연결 오류: '+err.type+' — 인터넷 연결을 확인해주세요.';
-  });
+  if(!name){ alert('닉네임을 입력해주세요'); return; }
+  if(!socket||!socket.connected){ alert('서버에 연결되지 않았습니다'); return; }
+  mpPlayers=[{id: mySocketId, name}];
+  socket.emit('create-room', {name});
 }
 
-function handleHostData(conn, data){
-  if(data.t==='join'){
-    const idx=mpPlayers.length;
-    mpPlayers.push({id:conn.peer, name:data.name, color:data.color});
-    clientConns.push(conn);
-    conn.send({t:'join-ack', playerIndex:idx, players:mpPlayers});
-    broadcast({t:'players-updated', players:mpPlayers});
-    updateLobbyList(mpPlayers);
-    addChatMsg('시스템', data.name+'님이 참가했습니다!', '#ffd700', true);
-  }
-  if(data.t==='input'){ remoteInputMap[conn.peer]=data.i; }
-  if(data.t==='chat'){
-    broadcast({t:'chat', name:data.name, msg:data.msg, color:data.color});
-    addChatMsg(data.name, data.msg, data.color, !gameRunning);
-  }
+// ── 방 참가 ──
+function doJoinRoom(roomId){
+  const name=document.getElementById('mp-name').value.trim();
+  if(!name){ alert('닉네임을 입력해주세요'); return; }
+  if(!socket||!socket.connected){ alert('서버에 연결되지 않았습니다'); return; }
+  gameMode='client';
+  socket.emit('join-room', {roomId, name});
 }
 
-function handleClientLeft(conn){
-  clientConns=clientConns.filter(c=>c!==conn);
-  mpPlayers=mpPlayers.filter(p=>p.id!==conn.peer);
-  delete remoteInputMap[conn.peer];
-  if(!gameRunning){ broadcast({t:'players-updated',players:mpPlayers}); updateLobbyList(mpPlayers); }
-  const c=characters.find(ch=>ch.socketId===conn.peer);
-  if(c){ c.isRemotePlayer=false; c.socketId=null; }
-}
-
-// ── 방 참가 (클라이언트) ──
-function joinRoom(name){
-  const btn=document.getElementById('btn-mp-entry');
-  const myColor=COLORS[Math.floor(Math.random()*COLORS.length)];
-  btn.disabled=true; btn.textContent='연결 중...';
-
-  peer=new Peer();
-  peer.on('open',()=>{
-    const conn=peer.connect(_urlRoomCode, {reliable:true});
-    hostConn=conn;
-    conn.on('open',()=>{
-      conn.send({t:'join', name, color:myColor});
-      conn.on('data', data=>handleClientData(data));
-      btn.disabled=false; btn.textContent='참가하기';
-    });
-    conn.on('close',()=>{ if(gameRunning){ alert('호스트 연결이 끊겼습니다'); resetGame(); } });
-    conn.on('error', err=>{ alert('참가 실패: '+err); btn.disabled=false; btn.textContent='참가하기'; });
-  });
-  peer.on('error', err=>{ alert('연결 오류: '+err.type); btn.disabled=false; btn.textContent='참가하기'; });
-}
-
-function handleClientData(data){
-  if(data.t==='join-ack'){ myPlayerIndex=data.playerIndex; mpPlayers=data.players; showLobby(_urlRoomCode,false,mpPlayers); }
-  if(data.t==='players-updated'){ mpPlayers=data.players; updateLobbyList(data.players); }
-  if(data.t==='game-started'){ onGameStarted(data.players); }
-  if(data.t==='state'){ applyState(data.s); }
-  if(data.t==='event'){ applyEvent(data.e); }
-  if(data.t==='chat'){ addChatMsg(data.name, data.msg, data.color, !gameRunning); }
-}
-
-// ── 대기실 ──
-function showLobby(roomId,isHost,players){
-  document.getElementById('mp-entry').style.display='none';
-  document.getElementById('mp-lobby').style.display='';
-  const shortCode=roomId.substring(0,8).toUpperCase();
-  document.getElementById('lobby-code').textContent=shortCode;
-  const base=location.href.split('?')[0];
-  document.getElementById('lobby-link').dataset.url=`${base}?room=${roomId}`;
-  document.getElementById('lobby-link').textContent='🔗 링크 복사하기';
-  updateLobbyList(players);
+// ── 대기실 표시 ──
+function showLobby(isHost, players){
+  document.getElementById('mp-browser').style.display='none';
+  document.getElementById('mp-lobby').style.display='flex';
+  document.getElementById('lobby-room-title').textContent=
+    isHost ? '내 방' : (mpPlayers[0]?.name||'?')+'의 방';
   document.getElementById('btn-mp-start').style.display=isHost?'':'none';
   document.getElementById('lobby-status').textContent=isHost
-    ?'✅ 방이 생성됐습니다. 친구가 참가하면 시작하세요!'
-    :'⏳ 호스트가 게임을 시작하기를 기다리는 중...';
+    ? '✅ 방이 만들어졌습니다. 친구들이 참가하면 시작하세요!'
+    : '⏳ 방장이 게임을 시작하기를 기다리는 중...';
+  updateLobbyList(players);
 }
 
 function updateLobbyList(players){
-  mpPlayers=players;
+  if(players) mpPlayers=players;
   const icons=['👑','🥊','🌟','🔥','⚡','💫','🎯','🎲','🏆','🌈'];
-  const ul=document.getElementById('player-list');
-  ul.innerHTML=players.map((p,i)=>{
+  const ul=document.getElementById('player-list-big');
+  if(!ul) return;
+  ul.innerHTML=mpPlayers.map((p,i)=>{
     const name=typeof p==='string'?p:p.name;
-    return `<li>${icons[i]||'•'} ${name}${i===0?' <span style="color:#ffd700;font-size:.75rem">(호스트)</span>':''}${i===myPlayerIndex?' <span style="color:#ff6b35;font-size:.75rem">(나)</span>':''}</li>`;
+    const color=COLORS[i%COLORS.length];
+    const isHost=i===0, isMe=i===myPlayerIndex;
+    return `<li>
+      <span class="player-dot" style="background:${color}"></span>
+      <span style="flex:1">${name}</span>
+      ${isHost?'<span class="player-tag tag-host">방장</span>':''}
+      ${isMe?'<span class="player-tag tag-me">나</span>':''}
+    </li>`;
   }).join('');
+  document.getElementById('lobby-count-badge').textContent=`${mpPlayers.length} / 50명`;
   const btn=document.getElementById('btn-mp-start');
-  if(btn) btn.disabled=players.length<2;
-}
-
-function copyLink(){
-  const url=document.getElementById('lobby-link').dataset.url;
-  const el=document.getElementById('lobby-link');
-  navigator.clipboard.writeText(url).then(()=>{
-    el.textContent='✅ 복사됐습니다!';
-    setTimeout(()=>el.textContent='🔗 링크 복사하기',2000);
-  }).catch(()=>{
-    prompt('아래 링크를 복사하세요:',url);
-  });
+  if(btn) btn.disabled=mpPlayers.length<2;
 }
 
 // ── 채팅 ──
-let _myChatColor='#ff6b35';
-
-function addChatMsg(name, msg, color, inLobby){
-  const txt=`<span class="cn" style="color:${color||'#ccc'}">${name}</span>: ${msg}`;
+function addChatMsg(name, msg, inLobby){
   if(inLobby){
     const box=document.getElementById('lobby-chat-msgs');
-    if(box){
-      const div=document.createElement('div');
-      div.className='chat-msg'; div.innerHTML=txt;
-      box.appendChild(div);
-      box.scrollTop=box.scrollHeight;
-    }
+    if(!box) return;
+    const div=document.createElement('div');
+    const i=mpPlayers.findIndex(p=>p.name===name);
+    const color=i>=0?COLORS[i%COLORS.length]:'#aaa';
+    div.className='chat-msg-row';
+    div.innerHTML=`<span class="cn" style="color:${color}">${name}</span>: ${msg}`;
+    box.appendChild(div);
+    box.scrollTop=box.scrollHeight;
   } else {
     const box=document.getElementById('game-chat-msgs');
-    if(box){
-      const div=document.createElement('div');
-      div.className='game-chat-msg'; div.innerHTML=txt;
-      box.appendChild(div);
-      // 오래된 메시지 제거
-      while(box.children.length>8) box.removeChild(box.firstChild);
-    }
+    if(!box) return;
+    const div=document.createElement('div');
+    div.className='game-chat-msg'; div.textContent=`${name}: ${msg}`;
+    box.appendChild(div);
+    while(box.children.length>8) box.removeChild(box.firstChild);
   }
+}
+
+function addSysMsg(msg){
+  const box=document.getElementById('lobby-chat-msgs');
+  if(!box) return;
+  const div=document.createElement('div');
+  div.className='chat-sys'; div.textContent=msg;
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
 }
 
 function sendLobbyChat(){
   const inp=document.getElementById('lobby-chat-input');
   const msg=inp.value.trim();
-  if(!msg) return;
+  if(!msg||!socket) return;
   inp.value='';
-  const me=mpPlayers[myPlayerIndex];
-  const name=me?me.name:'나';
-  const color=COLORS[myPlayerIndex%COLORS.length];
-  addChatMsg(name, msg, color, true);
-  const payload={t:'chat', name, msg, color};
-  if(gameMode==='host')    broadcast(payload);
-  else if(hostConn&&hostConn.open) hostConn.send(payload);
+  socket.emit('chat-message',{msg});
 }
 
 function sendGameChat(){
   const inp=document.getElementById('game-chat-input');
   const msg=inp.value.trim();
-  if(!msg) return;
+  if(!msg||!socket) return;
   inp.value='';
-  const me=mpPlayers[myPlayerIndex];
-  const name=me?me.name:'나';
-  const color=COLORS[myPlayerIndex%COLORS.length];
-  addChatMsg(name, msg, color, false);
-  const payload={t:'chat', name, msg, color};
-  if(gameMode==='host')    broadcast(payload);
-  else if(hostConn&&hostConn.open) hostConn.send(payload);
+  socket.emit('chat-message',{msg});
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
@@ -1599,18 +1682,18 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+// ── 나가기 / 시작 ──
 function leaveRoom(){
-  if(peer){ peer.destroy(); peer=null; }
-  hostConn=null; clientConns=[];
-  gameMode='solo'; myPlayerIndex=0; mpPlayers=[];
-  resetMpUI();
-  showSetup();
+  if(socket) socket.emit('leave-room');
+  currentRoomId=null; mpPlayers=[]; myPlayerIndex=0; gameMode='solo';
+  document.getElementById('mp-lobby').style.display='none';
+  document.getElementById('mp-browser').style.display='flex';
+  document.getElementById('room-list-scroll').innerHTML='<div class="room-list-empty">방 목록을 불러오는 중...</div>';
 }
 
 function mpStartGame(){
-  if(gameMode!=='host') return;
-  broadcast({t:'game-started', players:mpPlayers});
-  onGameStarted(mpPlayers);
+  if(gameMode!=='host'||!socket) return;
+  socket.emit('start-game');
 }
 
 function onGameStarted(players){
@@ -1633,9 +1716,6 @@ function onGameStarted(players){
     playerAttackPressed=false; keys.w=keys.a=keys.s=keys.d=false;
   }
 }
-
-// URL에 room 코드가 있으면 자동으로 멀티플레이 화면 열기
-if(_urlRoomCode) showMultiplayer();
 </script>
 </body>
 </html>
